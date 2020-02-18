@@ -13,6 +13,8 @@
 using namespace std;
 
 
+
+
 struct Nbody {
 	Vec3f position;
 	Vec3f velocity;

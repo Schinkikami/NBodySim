@@ -1,0 +1,8 @@
+/.vs
+/.idea
+/glew
+/glut
+/out
+CmakeLists.txt
+*.dll
+*.lib

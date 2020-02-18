@@ -1,25 +1,38 @@
 ﻿// NBodyCuda.cpp: Definiert den Einstiegspunkt für die Anwendung.
 //
 
-#pragma once
-
-#define num_particles (int)1000
+#define num_particles (int)100
 #define eps (float)0.1
+#define CUBE_SIZE 200
+#define MAX_DEPTH 100
+#define SIM_ACC (float).8
 
+#include <GL/glew.h>      // openGL helper
+#include <GL/glut.h>      // openGL helper
 
-#include <omp.h>
 #include <random>
 #include "NBody.h"
 #include <time.h>
 #include <algorithm>
 #include "GLStuff.h"
+#include "OctTree.h"
+#include <mutex>
 
 using namespace std;
 
 int num_bodys = num_particles;
 float max_velo;
-vector<Nbody> particles;
+vector<Nbody*> particles;
 default_random_engine rndEngine(42);
+OctNode* octtree;
+OctNode* renderTree;
+
+bool drawOctTree;
+Vec3f max_field;
+Vec3f min_field;
+
+mutex renderTree_mutex;
+
 
 int main(int argc, char** argv)
 {
@@ -78,6 +91,7 @@ void initialize()
 
 void setDefaults()
 {
+
 	// scene Information
 	cameraPos.set(0, 100, 0);
 	cameraDir.set(0, -1, 0);
@@ -95,10 +109,14 @@ void setDefaults()
 	keyDown.resize(255, false);
 	// draw mode (VBO)
 	drawMode = 0;
+	drawOctTree = false;
 	simulate = false;
 	sim_speed = 0.001f;
 	num_bodys = num_particles;
-	particles = vector<Nbody>(num_particles);
+	particles = vector<Nbody*>(num_particles);
+	octtree = new OctNode(0, MAX_DEPTH, Vec3f(-CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE), Vec3f(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE));
+	renderTree = new OctNode(0, MAX_DEPTH, Vec3f(-CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE), Vec3f(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE));
+
 	Vec3f dist_scale(50, 50, 50);
 	normal_distribution<float> nx(0.f, dist_scale.x);
 	normal_distribution<float> ny(0.f, dist_scale.y);
@@ -106,16 +124,27 @@ void setDefaults()
 	uniform_real_distribution<float> weigthdist(1., 1.);
 
 	Vec3f g1_pos = Vec3f(0, 0, 0);
-	Vec3f g2_pos = Vec3f(40, 0, 0);
+	Vec3f g2_pos = Vec3f(0, 0, 0);
 
-	for (int i = 0; i < num_bodys; i++) {
+	for (int i = 0; i < num_bodys/2; i++) {
 		float rads =uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
 		float rads2 = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
 		float dist = uniform_real_distribution<float>(0, 100)(rndEngine);
 
 		//particles[i] = Nbody(Vec3f(cos(rads2) * dist + sin(rads) * dist + g1_pos.x, sin(rads2) * dist + g1_pos.y, cos(rads) * dist + g1_pos.z), Vec3f(0,0,0), weigthdist(rndEngine));
+		particles[i] = new Nbody(Vec3f(cos(rads2) *dist + sin(rads) * dist + g1_pos.x, sin(rads2)*dist + g1_pos.y, cos(rads) * dist + g1_pos.z), Vec3f(-sin(rads2)* cos(rads) * dist *0.0 *(num_bodys), 0, sin(rads2) * -sin(rads) * dist * 0.0 *(num_bodys)), weigthdist(rndEngine));
+		//float distance = Vec3f(particles[i].position.x, particles[i].position.z, 0.f).length();
+		//float rads = std::asin(particles[i].position.x / distance);
+		//particles[i].velocity.set(cos(rads)*distance*10, 0 , -sin(rads) * distance * 10);
+	}
 
-		particles[i] = Nbody(Vec3f(cos(rads2) *dist +sin(rads) * dist + g1_pos.x, sin(rads2)*dist + g1_pos.y, cos(rads) * dist + g1_pos.z), Vec3f(-sin(rads2)* cos(rads) * dist *0.01 *(num_bodys), 0, sin(rads2) * -sin(rads) * dist * 0.01 *(num_bodys)), weigthdist(rndEngine));
+	for (int i = num_bodys/2; i < num_bodys; i++) {
+		float rads = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
+		float rads2 = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
+		float dist = uniform_real_distribution<float>(0, 100)(rndEngine);
+
+		//particles[i] = Nbody(Vec3f(cos(rads2) * dist + sin(rads) * dist + g1_pos.x, sin(rads2) * dist + g1_pos.y, cos(rads) * dist + g1_pos.z), Vec3f(0,0,0), weigthdist(rndEngine));
+		particles[i] = new Nbody(Vec3f(cos(rads2) * dist + sin(rads) * dist + g2_pos.x, sin(rads2) * dist + g2_pos.y, cos(rads) * dist + g2_pos.z), Vec3f(-sin(rads2) * cos(rads) * dist * 0.0 * (num_bodys), 0, sin(rads2) * -sin(rads) * dist * 0.0 * (num_bodys)), weigthdist(rndEngine));
 		//float distance = Vec3f(particles[i].position.x, particles[i].position.z, 0.f).length();
 		//float rads = std::asin(particles[i].position.x / distance);
 		//particles[i].velocity.set(cos(rads)*distance*10, 0 , -sin(rads) * distance * 10);
@@ -138,30 +167,57 @@ void setDefaults()
 
 
 void simStep(float secpassed) {
+
+	for (int i = 0; i < num_bodys; i++) {
+		max_field.x = max(max_field.x, particles[i]->position.x);
+		min_field.x = min(min_field.x, particles[i]->position.x);
+
+		max_field.y = max(max_field.y, particles[i]->position.y);
+		min_field.y = min(min_field.y, particles[i]->position.y);
+
+		max_field.z = max(max_field.z, particles[i]->position.z);
+		min_field.z = min(min_field.z, particles[i]->position.z);
+	}
 	vector<Vec3f> acc(num_bodys);
 
 	vector<int>  collisons(num_bodys, -1);
 
 	int num_colls = 0;
+	
+	octtree->clear();
 
+	octtree->max = Vec3f(max_field.x, max_field.y, max_field.z);
+	octtree->min = Vec3f(min_field.x, min_field.y, min_field.z);
 
+	for (int i = 0; i < num_bodys; i++) {
+		octtree->add(particles[i]);
+	}
+	//octtree->print();
+	octtree->updateTree();
 
 	#pragma omp parallel for
+	for (int i = 0; i < num_bodys; i++) {
+		acc[i] = Vec3f(0, 0, 0);
+		num_colls += octtree->updateParticle(i , &particles , &acc, &collisons, SIM_ACC);
+		acc[i] *= G;
+	}
+	
+	/*
 	for (int i = 0; i < num_bodys; i++) {
 		acc[i] = Vec3f(0, 0, 0);
 		for (int j = 0; j < num_bodys; j++) {
 			if (i == j) { continue; }
 			
-			Vec3f delta_dir = particles[j].position - particles[i].position;
+			Vec3f delta_dir = particles[j]->position - particles[i]->position;
 			float dist = delta_dir.length();
-			if (dist < particles[i].radius || dist < particles[j].radius) {
+			if (dist < particles[i]->radius || dist < particles[j]->radius) {
 				#pragma omp atomic
 				num_colls++;
 				collisons[min(i,j)] = max(i,j);
 			}
 			else {
 				//dist = std::max(dist, 1.f);
-				acc[i] += (particles[j].mass / pow(dist, 3)) * delta_dir;
+				acc[i] += (float)(particles[j]->mass / pow(dist, 3)) * delta_dir;
 			}
 		}
 		acc[i] *= G;
@@ -176,42 +232,56 @@ void simStep(float secpassed) {
 				to_rem[idx] = collisons[i];
 				idx++;
 				
-				particles[i].mass = particles[i].mass + particles[collisons[i]].mass;
-				particles[i].position = (particles[i].position * (1 - (particles[collisons[i]].mass / particles[i].mass)) + particles[collisons[i]].position * (particles[collisons[i]].mass / particles[i].mass));
-				particles[i].velocity = (particles[i].velocity * (1 - (particles[collisons[i]].mass / particles[i].mass)) + particles[collisons[i]].velocity * (particles[collisons[i]].mass / particles[i].mass));
-				particles[i].computeRadius();
+				particles[i]->mass = particles[i]->mass + particles[collisons[i]]->mass;
+				particles[i]->position = (particles[i]->position * (1 - (particles[collisons[i]]->mass / particles[i]->mass)) + particles[collisons[i]]->position * (particles[collisons[i]]->mass / particles[i]->mass));
+				particles[i]->velocity = (particles[i]->velocity * (1 - (particles[collisons[i]]->mass / particles[i]->mass)) + particles[collisons[i]]->velocity * (particles[collisons[i]]->mass / particles[i]->mass));
+				particles[i]->computeRadius();
 			}
 		}
 
 		sort(to_rem.begin(), to_rem.end(), greater<int>());
-		for each (int rem_indx in to_rem) {
+		for(int rem_indx : to_rem) {
 			if (rem_indx < 0) {
 				continue;
 			}
+			delete particles[rem_indx];
+
 			particles.erase(particles.begin() + rem_indx);
 			num_bodys--;
 		}
 
 	}
+	*/
+
 
 	max_velo = 0.f;
 	for (int i = 0; i < num_bodys; i++) {
-		particles[i].velocity += acc[i];
-		particles[i].position += particles[i].velocity * secpassed;
-		if (particles[i].velocity.length() > max_velo) {
-			max_velo = particles[i].velocity.length();
+		particles[i]->velocity += acc[i];
+		particles[i]->position += particles[i]->velocity * secpassed;
+
+
+
+		if (particles[i]->velocity.length() > max_velo) {
+			max_velo = particles[i]->velocity.length();
 		}
-		if (abs(particles[i].position.x) > 200 || abs(particles[i].position.y) > 200 || abs(particles[i].position.z) > 200) {
-			particles[i].velocity -= 0.01f * particles[i].position;
+		if (abs(particles[i]->position.x) > 200 || abs(particles[i]->position.y) > 200 || abs(particles[i]->position.z) > 200) {
+			particles[i]->velocity -= 0.01f * particles[i]->position;
 			//float rads = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
 			//float rads2 = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
 			//float dist = uniform_real_distribution<float>(0, 100)(rndEngine);
 			//particles[i] = Nbody(Vec3f(cos(rads2) * dist + sin(rads) * dist , sin(rads2) * dist, cos(rads) * dist), Vec3f(-sin(rads2) * cos(rads) * dist * 0.01 * (num_bodys), 0, sin(rads2) * -sin(rads) * dist * 0.01 * (num_bodys)), 1);
 
 		}
+
+
 	}
-	
-	
+
+	renderTree_mutex.lock();
+	delete renderTree;
+	renderTree = octtree;
+	octtree = new OctNode(0, MAX_DEPTH, Vec3f(), Vec3f());
+	renderTree_mutex.unlock();
+
 }
 
 void processTimedEvent(int x)
@@ -221,7 +291,6 @@ void processTimedEvent(int x)
 	// Time now. int x is time of last run
 	clock_t clock_this_run = clock();
 	int msPassed = (clock_this_run - x) * 1000 / CLOCKS_PER_SEC;
-	cout << particles[0].position << "   " << particles[1].position << endl;
 	
 	
 
@@ -283,6 +352,7 @@ void processTimedEvent(int x)
 	if (simulate) {
 		simStep(sim_speed);
 	}
+
 	// start event again
 	glutTimerFunc(std::max(1, 20 - msPassed), processTimedEvent, clock_this_run);
 }
@@ -317,8 +387,64 @@ void drawCS()
 	glEnd();
 }
 
+void drawNode(OctNode* nodePointer) {
 
+	if (nodePointer->depth > 4) { return; }
+
+	OctNode currentNode = *nodePointer;
+
+	glBegin(GL_LINES);
+	glColor3f(0, 1, 0);
+	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.min.z);
+	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.min.z);
+
+	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.min.z);
+	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.min.z);
+
+	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.min.z);
+	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.max.z);
+
+	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.min.z);
+	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.min.z);
+
+	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.min.z);
+	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.max.z);
+
+	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.min.z);
+	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.min.z);
+
+	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.min.z);
+	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.max.z);
+
+
+	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.max.z);
+	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.max.z);
+
+	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.max.z);
+	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.max.z);
+
+	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.max.z);
+	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.max.z);
+
+	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.max.z);
+	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.max.z);
+
+	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.min.z);
+	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.max.z);
+
+
+	glEnd();
+
+	for (int i = 0; i < 8; i++) {
+		if (nodePointer->children[i]) {
+			drawNode(nodePointer->children[i]);
+		}
+	}
+
+}
 void renderScene() {
+	//drawOctTree = true;
+	//simStep(sim_speed);
 	// clear and set camera
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glLoadIdentity();
@@ -337,16 +463,23 @@ void renderScene() {
 
 	for (int i = 0; i < num_bodys; i++) {
 		glPushMatrix();
-		glTranslatef(particles[i].position.x, particles[i].position.y, particles[i].position.z);
+
+		float cam_dist = (cameraPos - particles[i]->position).length();
+
+		glTranslatef(particles[i]->position.x, particles[i]->position.y, particles[i]->position.z);
 
 
-		glColor3f(particles[i].velocity.length()/max_velo, 0, 1 - particles[i].velocity.length()/max_velo);
+		glColor3f(particles[i]->velocity.length()/max_velo, 0, 1 - particles[i]->velocity.length()/max_velo);
 
-		glutSolidSphere(particles[i].radius, (int)(10* particles[i].radius), (int)(10* particles[i].radius));
+		glutSolidSphere(particles[i]->radius, max(int(20.f/(cam_dist/5)) ,3), max(int(20.f / (cam_dist/5)), 3));
 		glPopMatrix();
 	}
 	
-
+	if (drawOctTree) {
+		renderTree_mutex.lock();
+		drawNode(renderTree);
+		renderTree_mutex.unlock();
+	}
 	  // swap Buffers
 	glutSwapBuffers();
 }
@@ -409,8 +542,17 @@ void keyPressed(unsigned char key, int x, int y)
 	case 'i':
 		simulate = !simulate;
 		glutPostRedisplay();
-	
-
+		break;
+	case 'j':
+		if (drawOctTree) {
+			drawOctTree = false;
+		}
+		else {
+			simulate = false;
+			drawOctTree = true;
+		}
+		glutPostRedisplay();
+		break;
 	}
 }
 
