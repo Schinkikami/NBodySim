@@ -1,69 +1,114 @@
-#pragma once
-
-
 #include <iostream>
 #include "Octtree.h"
 
-void OctNode::add(Nbody p) {
+void OctNode::add(Nbody* par) {
 
-	if (!checkBoundary(p.position)) {
-		std::cout << "Tried to add particle that doesnt fit in Node!";
-	}
+	//string pref = "";
+	//for (int i = 0; i < depth; i++) {
+	//	pref += "\t";
+	//}
 
-	if (!hasParticle) {
+	if (depth > max_depth) { 
+		cout << "DepthProblem!" << endl;
+		return; }
+
+	//cout << pref << "Inserting Particle" << endl;
+
+	//cout << pref << min << " " << max << endl;
+
+	//if (!checkBoundary(par->position)) {
+	//	std::cout << pref <<"Tried to add particle that doesnt fit in Node!" << endl;
+	//}
+	int childnum;
+	if (!particle) {
+		//cout << pref<<"Node was empty....";
+
 		if (numChildParticles == 0) {
-			particle = &p;
-			hasParticle = true;
+			//cout << "Just inserting!" << endl;
+			particle = par;
 		}
 		else {
-			int childnum = getCorrespondingChild(p.position);
-			if (&children[childnum]) {
-				(*children[childnum]).add(p);
+			childnum = getCorrespondingChild(par->position);
+			//cout << "Inserting in child " << childnum << endl;
+			if (children[childnum]) {
+				(*children[childnum]).add(par);
 			}
 			else {
 				pair<Vec3f, Vec3f> min_max = computeBoundingBox(childnum);
-				children[childnum] = new OctNode(this, min_max.first, min_max.second);
-				(*children[childnum]).add(p);
+				if (depth + 1 > max_depth) {
+					//cout << "Could not create child. Depth Prob" << endl;
+					return;
+				}
+				children[childnum] = new OctNode(depth+1, max_depth, min_max.first, min_max.second);
+				(*children[childnum]).add(par);
 			}
 		}
 
 	}
 	else {
+
+		//cout << pref <<  "Leaf already has particle. ";
 		// Have to resolve that
 		// First just add the particle
 
-		int childnum = getCorrespondingChild(p.position);
-		if (&children[childnum]) {
-			(*children[childnum]).add(p);
+		childnum = getCorrespondingChild(particle->position);
+		//cout << particle->position << endl;
+		//cout << "Adding into child " << childnum << " ";
+		if (children[childnum]) {
+			//cout << "that is already there" << endl;
+			(*children[childnum]).add(particle);
 		}
 		else {
+			//cout << "that we have to create!" << endl;
+			if (depth + 1 > max_depth) {
+				//cout << "Could not create child. Depth Prob" << endl;
+				return;
+			}
 			pair<Vec3f, Vec3f> min_max = computeBoundingBox(childnum);
-			children[childnum] = new OctNode(this, min_max.first, min_max.second);
-			(*children[childnum]).add(p);
+			//cout << min_max.first << "  " << min_max.second;
+			children[childnum] = new OctNode(depth+1 ,max_depth ,min_max.first, min_max.second);
+			children[childnum]->add(particle);
 		}
 
+		//cout << pref << "Now inserting new value ";
 		//Now add your own particle in the subtree
-		int childnum = getCorrespondingChild((*particle).position);
-		if (&children[childnum]) {
-			(*children[childnum]).add((*particle));
+		childnum = getCorrespondingChild(par->position);
+		//cout << par->position << endl;
+		//cout << "into " << childnum << " ";
+		if (children[childnum]) {
+			//cout << "that is already there!" << endl;
+			children[childnum]->add(par);
 
 		}
 		else {
+			//cout << "that we have to create!" << endl;
 			pair<Vec3f, Vec3f> min_max = computeBoundingBox(childnum);
-			children[childnum] = new OctNode(this, min_max.first, min_max.second);
-			(*children[childnum]).add((*particle));
+			children[childnum] = new OctNode(depth + 1, max_depth, min_max.first, min_max.second);
+			children[childnum]->add(par);
 		}
-		hasParticle = false;
+		//hasParticle = false;
+		particle = NULL;
 	}
 	numChildParticles++;
 }
 
 
 int OctNode::getCorrespondingChild(Vec3f v) {
-	bool tx = (max.x - min.x)/2 > v.x - min.x;
-	bool ty = (max.y - min.y)/2 > v.y - min.y;
-	bool tz = (max.y - min.y)/2 > v.y - min.y;
+	int childNum = 0;
+	
+	Vec3f center = Vec3f((max + min) / 2);
 
+	bool tx = center.x > v.x;
+	bool ty = center.y > v.y;
+	bool tz = center.z > v.z;
+
+	childNum |= 1 * (int)tz;
+	childNum |= 2 * (int)ty;
+	childNum |= 4 * (int)tx;
+
+	return childNum;
+
+	
 	if (tx) {
 		if (ty) {
 			if (tz) {
@@ -100,6 +145,7 @@ int OctNode::getCorrespondingChild(Vec3f v) {
 			}
 		}
 	}
+	
 
 }
 bool OctNode::checkBoundary(Vec3f p) {
@@ -120,8 +166,46 @@ bool OctNode::checkBoundary(Vec3f p) {
 }
 
 pair<Vec3f, Vec3f> OctNode::computeBoundingBox(int childnum) {
-	Vec3f new_max = Vec3f(max);
-	Vec3f new_min = Vec3f(min);
+	Vec3f new_max = Vec3f();
+	Vec3f new_min = Vec3f();
+
+	Vec3f center = Vec3f((max+min)/2);
+
+	bool tz = childnum & 1;
+	bool ty = childnum & 2;
+	bool tx = childnum & 4;
+
+	if (tz) {
+		new_min.z = min.z;
+		new_max.z = center.z;
+	}
+	else {
+		new_min.z = center.z;
+		new_max.z = max.z;
+	}
+
+	if (ty) {
+		new_min.y = min.y;
+		new_max.y = center.y;
+	}
+	else {
+		new_min.y = center.y;
+		new_max.y = max.y;
+	}
+
+	if (tx) {
+		new_min.x = min.x;
+		new_max.x = center.x;
+	}
+	else {
+		new_min.x = center.x;
+		new_max.x = max.x;
+	}
+
+
+	return pair<Vec3f, Vec3f>(new_min, new_max);
+
+
 
 	if (childnum / 4 == 0) {
 		new_max.x -= (max.x - min.x) / 2;
@@ -156,23 +240,24 @@ pair<Vec3f, Vec3f> OctNode::computeBoundingBox(int childnum) {
 //Update the center of mass and mass of the cell as well as the bounding box.
 void OctNode::updateTree() {
 	
+	numChildParticles = 0;
 
-	if (hasParticle) {
-		mass = (*particle).mass;
-		centerOfMass = (*particle).position;
-		numChildParticles = 0;
+	if (particle) {
+		mass = particle->mass;
+		centerOfMass = particle->position;
+		numChildParticles = 1;
 		return;
 	}
 
 	int tmp_num_children = 0;
 
-	for (int i = 0; i < 7; i++) {
-		if (&children[i]) {
+	for (int i = 0; i < 8; i++) {
+		if (children[i]) {
 			tmp_num_children++;
 			(*children[i]).updateTree();
 			mass += (*children[i]).mass;
-			centerOfMass += children[i].mass * children[i].centerOfMass;
-			numChildParticles += children[i].numChildParticles;
+			centerOfMass += children[i]->mass * children[i]->centerOfMass;
+			numChildParticles += children[i]->numChildParticles;
 		}
 	}
 
@@ -182,5 +267,94 @@ void OctNode::updateTree() {
 	}
 
 	centerOfMass /= mass;
+
+}
+
+int OctNode::updateParticle(int index, vector<Nbody*>* particles, vector<Vec3f>* acc, vector<int>* coll, float threshold){
+
+	float cell_length = (max - min).length();
+	Vec3f delta_dir = (*particles)[index]->position - centerOfMass;
+	float dist = delta_dir.length();
+
+	if (particle) {
+		if (particle == (*particles)[index] || dist <= (particle->radius+(*particles)[index]->radius) ) {
+			return 0;
+		}
+
+		(*acc)[index] -= (float)(mass / pow(dist, 3)) * delta_dir;
+		return 0;
+	}
+
+	if (cell_length / dist < threshold) {
+		(*acc)[index] -= (float)(mass / pow(dist, 3)) * delta_dir;
+		return 0;
+	}
+
+	for (int i = 0; i < 8; i++) {
+		if (children[i]) {
+			children[i]->updateParticle(index, particles, acc, coll, threshold);
+		}
+	}
+}
+
+void OctNode::clear() {
+	particle = NULL;
+	numChildParticles = 0;
+	mass = 0.f; centerOfMass = Vec3f(0.f, 0.f, 0.f);
+	for (int i = 0; i < 8; i++) {
+		delete children[i];
+		children[i] = NULL;
+	}
+
+}
+
+
+void OctNode::write(ofstream* file, int child_id) {
+	if (depth == 0) {
+		*file << "<!--XML Document-->\n";
+		*file << "<?xml version='1.0' encoding='us-ascii'>\n";
+	}
+
+	string pref = "";
+	for (int i = 0; i < depth; i++) {
+		pref += "\t";
+	}
+
+	if (numChildParticles == 1) {
+		*file << pref << "< Node " << "depth=\"" << depth << "\" id=\"" << child_id << "\" numPart=\"" << numChildParticles << "\" mass=\"" << mass << "\" center=\"(" << centerOfMass << ")\"/>\n";
+	}
+	else {
+		*file << pref <<"< Node " << "depth=\"" << depth << "\" id=\"" << child_id << "\" numPart=\"" << numChildParticles << "\" mass=\"" << mass << "\" center=\"(" << centerOfMass << ")\">\n";
+
+		for (int i = 0; i < 8; i++) {
+			if (children[i]) {
+				children[i]->write(file, i);
+			}
+		}
+
+		*file << pref << "</Node>\n";
+	}
+
+}
+void OctNode::print() {
+	string pref = "";
+	for (int i = 0; i < depth; i++) {
+		pref += "\t";
+	}
+
+	if (particle) {
+		cout << pref << (*particle).position << endl;
+	}
+	else {
+		cout << " ---- " << endl;
+	}
+
+	for (int i = 0; i < 8; i++) {
+		if (children[i]) {
+			children[i]->print();
+		} {
+			cout << pref << "----" << endl;
+		}
+	}
 
 }
