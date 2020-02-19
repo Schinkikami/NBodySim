@@ -1,11 +1,11 @@
 ﻿// NBodyCuda.cpp: Definiert den Einstiegspunkt für die Anwendung.
 //
 
-#define num_particles (int)100
+#define num_particles (int)2000
 #define eps (float)0.1
 #define CUBE_SIZE 200
 #define MAX_DEPTH 100
-#define SIM_ACC (float).8
+#define SIM_ACC (float)1.
 
 #include <GL/glew.h>      // openGL helper
 #include <GL/glut.h>      // openGL helper
@@ -123,16 +123,20 @@ void setDefaults()
 	normal_distribution<float> nz(0.f, dist_scale.z);
 	uniform_real_distribution<float> weigthdist(1., 1.);
 
-	Vec3f g1_pos = Vec3f(0, 0, 0);
-	Vec3f g2_pos = Vec3f(0, 0, 0);
+	Vec3f g1_pos = Vec3f(75, 0, 0);
+	Vec3f g2_pos = Vec3f(-75, 0, 0);
 
 	for (int i = 0; i < num_bodys/2; i++) {
 		float rads =uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
 		float rads2 = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
-		float dist = uniform_real_distribution<float>(0, 100)(rndEngine);
+		float dist = abs(normal_distribution<float>(0, 20)(rndEngine));
+		float z_height = normal_distribution<float>(0.f, 5.f)(rndEngine);
+
+		particles[i] = new Nbody(  Vec3f(cos(rads) * dist + g1_pos.x, z_height + g1_pos.y, sin(rads) * dist + g1_pos.z), Vec3f(-sin(rads) * dist * 0.0015 * (num_bodys), 0,   cos(rads) * dist * 0.0015 * (num_bodys) +7), weigthdist(rndEngine));
+
 
 		//particles[i] = Nbody(Vec3f(cos(rads2) * dist + sin(rads) * dist + g1_pos.x, sin(rads2) * dist + g1_pos.y, cos(rads) * dist + g1_pos.z), Vec3f(0,0,0), weigthdist(rndEngine));
-		particles[i] = new Nbody(Vec3f(cos(rads2) *dist + sin(rads) * dist + g1_pos.x, sin(rads2)*dist + g1_pos.y, cos(rads) * dist + g1_pos.z), Vec3f(-sin(rads2)* cos(rads) * dist *0.0 *(num_bodys), 0, sin(rads2) * -sin(rads) * dist * 0.0 *(num_bodys)), weigthdist(rndEngine));
+		//particles[i] = new Nbody(Vec3f(cos(rads2) *dist + sin(rads) * dist + g1_pos.x, sin(rads2)*dist + g1_pos.y, cos(rads) * dist + g1_pos.z), Vec3f(-sin(rads2)* cos(rads) * dist *0.0 *(num_bodys), 0, sin(rads2) * -sin(rads) * dist * 0.0 *(num_bodys)), weigthdist(rndEngine));
 		//float distance = Vec3f(particles[i].position.x, particles[i].position.z, 0.f).length();
 		//float rads = std::asin(particles[i].position.x / distance);
 		//particles[i].velocity.set(cos(rads)*distance*10, 0 , -sin(rads) * distance * 10);
@@ -141,10 +145,12 @@ void setDefaults()
 	for (int i = num_bodys/2; i < num_bodys; i++) {
 		float rads = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
 		float rads2 = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
-		float dist = uniform_real_distribution<float>(0, 100)(rndEngine);
+		float dist = abs(normal_distribution<float>(0, 20)(rndEngine));
+		float z_height = normal_distribution<float>(0.f, 5.f)(rndEngine);
 
-		//particles[i] = Nbody(Vec3f(cos(rads2) * dist + sin(rads) * dist + g1_pos.x, sin(rads2) * dist + g1_pos.y, cos(rads) * dist + g1_pos.z), Vec3f(0,0,0), weigthdist(rndEngine));
-		particles[i] = new Nbody(Vec3f(cos(rads2) * dist + sin(rads) * dist + g2_pos.x, sin(rads2) * dist + g2_pos.y, cos(rads) * dist + g2_pos.z), Vec3f(-sin(rads2) * cos(rads) * dist * 0.0 * (num_bodys), 0, sin(rads2) * -sin(rads) * dist * 0.0 * (num_bodys)), weigthdist(rndEngine));
+		particles[i] = new Nbody(Vec3f(cos(rads) * dist + g2_pos.x, z_height + g2_pos.y, sin(rads) * dist + g2_pos.z), Vec3f(-sin(rads) * dist * 0.002 * (num_bodys), 0, cos(rads) * dist * 0.002 * (num_bodys) -7), weigthdist(rndEngine));
+
+		//particles[i] = new Nbody(Vec3f(cos(rads2) * dist + sin(rads) * dist + g2_pos.x, sin(rads2) * dist + g2_pos.y, cos(rads) * dist + g2_pos.z), Vec3f(-sin(rads2) * cos(rads) * dist * 0.01 * (num_bodys), 0, sin(rads2) * -sin(rads) * dist * 0.01 * (num_bodys)), weigthdist(rndEngine));
 		//float distance = Vec3f(particles[i].position.x, particles[i].position.z, 0.f).length();
 		//float rads = std::asin(particles[i].position.x / distance);
 		//particles[i].velocity.set(cos(rads)*distance*10, 0 , -sin(rads) * distance * 10);
@@ -265,7 +271,10 @@ void simStep(float secpassed) {
 			max_velo = particles[i]->velocity.length();
 		}
 		if (abs(particles[i]->position.x) > 200 || abs(particles[i]->position.y) > 200 || abs(particles[i]->position.z) > 200) {
-			particles[i]->velocity -= 0.01f * particles[i]->position;
+			delete particles[i];
+			particles.erase(particles.begin() + i);
+			num_bodys--;
+			//particles[i]->velocity -= 0.01f * particles[i]->position;
 			//float rads = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
 			//float rads2 = uniform_real_distribution<float>(0, 2 * 3.14)(rndEngine);
 			//float dist = uniform_real_distribution<float>(0, 100)(rndEngine);
@@ -387,62 +396,61 @@ void drawCS()
 	glEnd();
 }
 
-void drawNode(OctNode* nodePointer) {
-
-	if (nodePointer->depth > 4) { return; }
-
-	OctNode currentNode = *nodePointer;
+void drawNode(OctNode* currentNode) {
 
 	glBegin(GL_LINES);
 	glColor3f(0, 1, 0);
-	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.min.z);
-	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.min.z);
+	glVertex3f(currentNode->min.x, currentNode->min.y, currentNode->min.z);
+	glVertex3f(currentNode->max.x, currentNode->min.y, currentNode->min.z);
 
-	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.min.z);
-	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.min.z);
+	glVertex3f(currentNode->min.x, currentNode->min.y, currentNode->min.z);
+	glVertex3f(currentNode->min.x, currentNode->max.y, currentNode->min.z);
 
-	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.min.z);
-	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.max.z);
+	glVertex3f(currentNode->min.x, currentNode->min.y, currentNode->min.z);
+	glVertex3f(currentNode->min.x, currentNode->min.y, currentNode->max.z);
 
-	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.min.z);
-	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.min.z);
+	glVertex3f(currentNode->max.x, currentNode->min.y, currentNode->min.z);
+	glVertex3f(currentNode->max.x, currentNode->max.y, currentNode->min.z);
 
-	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.min.z);
-	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.max.z);
+	glVertex3f(currentNode->max.x, currentNode->min.y, currentNode->min.z);
+	glVertex3f(currentNode->max.x, currentNode->min.y, currentNode->max.z);
 
-	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.min.z);
-	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.min.z);
+	glVertex3f(currentNode->min.x, currentNode->max.y, currentNode->min.z);
+	glVertex3f(currentNode->max.x, currentNode->max.y, currentNode->min.z);
 
-	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.min.z);
-	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.max.z);
+	glVertex3f(currentNode->min.x, currentNode->max.y, currentNode->min.z);
+	glVertex3f(currentNode->min.x, currentNode->max.y, currentNode->max.z);
 
 
-	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.max.z);
-	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.max.z);
+	glVertex3f(currentNode->min.x, currentNode->min.y, currentNode->max.z);
+	glVertex3f(currentNode->max.x, currentNode->min.y, currentNode->max.z);
 
-	glVertex3f(currentNode.min.x, currentNode.min.y, currentNode.max.z);
-	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.max.z);
+	glVertex3f(currentNode->min.x, currentNode->min.y, currentNode->max.z);
+	glVertex3f(currentNode->min.x, currentNode->max.y, currentNode->max.z);
 
-	glVertex3f(currentNode.min.x, currentNode.max.y, currentNode.max.z);
-	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.max.z);
+	glVertex3f(currentNode->min.x, currentNode->max.y, currentNode->max.z);
+	glVertex3f(currentNode->max.x, currentNode->max.y, currentNode->max.z);
 
-	glVertex3f(currentNode.max.x, currentNode.min.y, currentNode.max.z);
-	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.max.z);
+	glVertex3f(currentNode->max.x, currentNode->min.y, currentNode->max.z);
+	glVertex3f(currentNode->max.x, currentNode->max.y, currentNode->max.z);
 
-	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.min.z);
-	glVertex3f(currentNode.max.x, currentNode.max.y, currentNode.max.z);
+	glVertex3f(currentNode->max.x, currentNode->max.y, currentNode->min.z);
+	glVertex3f(currentNode->max.x, currentNode->max.y, currentNode->max.z);
 
 
 	glEnd();
 
 	for (int i = 0; i < 8; i++) {
-		if (nodePointer->children[i]) {
-			drawNode(nodePointer->children[i]);
+		if (currentNode->children[i]) {
+			drawNode(currentNode->children[i]);
 		}
 	}
 
 }
 void renderScene() {
+
+
+
 	//drawOctTree = true;
 	//simStep(sim_speed);
 	// clear and set camera
