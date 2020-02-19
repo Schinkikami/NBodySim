@@ -398,8 +398,14 @@ void drawCS()
 
 void drawNode(OctNode* currentNode) {
 
+	for (int i = 0; i < 8; i++) {
+		if (currentNode->children[i]) {
+			drawNode(currentNode->children[i]);
+		}
+	}
+
 	glBegin(GL_LINES);
-	glColor3f(0, 1, 0);
+	glColor3f(0, min(1.f, ((float)currentNode->depth+1)/15), 0);
 	glVertex3f(currentNode->min.x, currentNode->min.y, currentNode->min.z);
 	glVertex3f(currentNode->max.x, currentNode->min.y, currentNode->min.z);
 
@@ -440,12 +446,7 @@ void drawNode(OctNode* currentNode) {
 
 	glEnd();
 
-	for (int i = 0; i < 8; i++) {
-		if (currentNode->children[i]) {
-			drawNode(currentNode->children[i]);
-		}
-	}
-
+	return;
 }
 void renderScene() {
 
