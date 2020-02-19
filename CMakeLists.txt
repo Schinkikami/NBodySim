@@ -7,10 +7,13 @@ project(NBody)
 
 
 # Fügen Sie der ausführbaren Datei dieses Projekts eine Quelle hinzu.
-add_compile_options("/openmp")
-add_executable (main "NBodyCuda.cpp" "NBodyCuda.h" "Vec3.h" "Octtree.h" "Octtree.cpp")
+add_executable (main "NBody.cpp" "NBody.h" "Vec3.h" "OctTree.h" "OctTree.cpp")
 
-
+FIND_PACKAGE(OpenMP)
+if(OPENMP_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif()
 
 
 option(AUTO_SEARCH_AND_INCLUDE_OpenGL "You can activate this option or include OpenGL by yourself" ON)

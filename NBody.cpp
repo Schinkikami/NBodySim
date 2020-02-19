@@ -5,7 +5,7 @@
 #define eps (float)0.1
 #define CUBE_SIZE 200
 #define MAX_DEPTH 100
-#define SIM_ACC (float)1.
+#define SIM_ACC (float).8
 
 #include <GL/glew.h>      // openGL helper
 #include <GL/glut.h>      // openGL helper
@@ -299,8 +299,8 @@ void processTimedEvent(int x)
 
 	// Time now. int x is time of last run
 	clock_t clock_this_run = clock();
-	int msPassed = (clock_this_run - x) * 1000 / CLOCKS_PER_SEC;
-	
+	float msPassed = (clock_this_run - x) * 1000.0f / CLOCKS_PER_SEC;
+
 	
 
 	glutPostRedisplay();
@@ -363,7 +363,7 @@ void processTimedEvent(int x)
 	}
 
 	// start event again
-	glutTimerFunc(std::max(1, 20 - msPassed), processTimedEvent, clock_this_run);
+	glutTimerFunc((int)std::max(1.0, 20.0 - msPassed), processTimedEvent, clock_this_run);
 }
 
 
@@ -552,13 +552,9 @@ void keyPressed(unsigned char key, int x, int y)
 		glutPostRedisplay();
 		break;
 	case 'j':
-		if (drawOctTree) {
-			drawOctTree = false;
-		}
-		else {
-			simulate = false;
-			drawOctTree = true;
-		}
+
+		drawOctTree = !drawOctTree;
+
 		glutPostRedisplay();
 		break;
 	}

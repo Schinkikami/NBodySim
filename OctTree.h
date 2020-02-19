@@ -1,5 +1,3 @@
-#pragma once
-
 #include <iostream>
 #include "NBody.h"
 #include <fstream>
@@ -56,5 +54,4 @@ public:
 	void updateTree() { root.updateTree(); };
 
 };
-
 
