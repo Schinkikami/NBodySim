@@ -1,5 +1,5 @@
 #include <iostream>
-#include "Octtree.h"
+#include "OctTree.h"
 
 void OctNode::add(Nbody* par) {
 
