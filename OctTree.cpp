@@ -20,7 +20,7 @@ void OctNode::add(Nbody* par) {
 	//	std::cout << pref <<"Tried to add particle that doesnt fit in Node!" << endl;
 	//}
 	int childnum;
-	if (!particle) {
+	if(!particle) {
 		//cout << pref<<"Node was empty....";
 
 		if (numChildParticles == 0) {

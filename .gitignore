@@ -3,6 +3,5 @@
 /glew
 /glut
 /out
-CmakeLists.txt
 *.dll
 *.lib
