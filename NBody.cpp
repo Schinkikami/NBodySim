@@ -290,8 +290,8 @@ void processTimedEvent(int x)
 
 	// Time now. int x is time of last run
 	clock_t clock_this_run = clock();
-	int msPassed = (clock_this_run - x) * 1000 / CLOCKS_PER_SEC;
-	
+	float msPassed = (clock_this_run - x) * 1000.0f / CLOCKS_PER_SEC;
+
 	
 
 	glutPostRedisplay();
@@ -354,7 +354,7 @@ void processTimedEvent(int x)
 	}
 
 	// start event again
-	glutTimerFunc(std::max(1, 20 - msPassed), processTimedEvent, clock_this_run);
+	glutTimerFunc((int)std::max(1.0, 20.0 - msPassed), processTimedEvent, clock_this_run);
 }
 
 
